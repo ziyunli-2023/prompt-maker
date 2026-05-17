@@ -5,6 +5,21 @@ import Carbon.HIToolbox
 final class PopupButton: NSPanel {
     private var selectedText: String = ""
     private let historyStore: HistoryStore
+    private let imageView: NSImageView = {
+        let view = NSImageView(frame: NSRect(x: 6, y: 6, width: 24, height: 24))
+        view.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Optimize prompt")
+        view.contentTintColor = .systemYellow
+        view.imageScaling = .scaleProportionallyUpOrDown
+        return view
+    }()
+    
+    private let progressIndicator: NSProgressIndicator = {
+        let pi = NSProgressIndicator(frame: NSRect(x: 8, y: 8, width: 20, height: 20))
+        pi.style = .spinning
+        pi.controlSize = .small
+        pi.isDisplayedWhenStopped = false
+        return pi
+    }()
 
     init(historyStore: HistoryStore) {
         self.historyStore = historyStore
@@ -29,11 +44,8 @@ final class PopupButton: NSPanel {
         container.layer?.borderColor = NSColor.separatorColor.cgColor
         container.layer?.borderWidth = 0.5
 
-        let imageView = NSImageView(frame: NSRect(x: 6, y: 6, width: 24, height: 24))
-        imageView.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Optimize prompt")
-        imageView.contentTintColor = .systemYellow
-        imageView.imageScaling = .scaleProportionallyUpOrDown
         container.addSubview(imageView)
+        container.addSubview(progressIndicator)
 
         self.contentView = container
     }
@@ -51,11 +63,23 @@ final class PopupButton: NSPanel {
     }
 
     private func handleClick() {
+        guard !imageView.isHidden else { return } // Prevent double clicks
+        
         let text = selectedText
-        hide()
         Diagnostics.log("PopupButton clicked, text length=\(text.count)")
 
+        // Enter loading state
+        imageView.isHidden = true
+        progressIndicator.startAnimation(nil)
+
         Task { @MainActor in
+            defer {
+                // Restore state and hide when done
+                self.imageView.isHidden = false
+                self.progressIndicator.stopAnimation(nil)
+                self.hide()
+            }
+            
             let service = ServiceFactory.make()
             do {
                 let result = try await service.complete(input: text)
@@ -72,8 +96,9 @@ final class PopupButton: NSPanel {
                     optimized: result.optimized
                 ))
 
-                // Small delay then simulate ⌘V to paste in-place
-                try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                // Increase delay to 200ms to allow macOS pasteboard buffer to flush 
+                // before target app processes the Cmd+V keystroke (fixes race condition)
+                try? await Task.sleep(nanoseconds: 200_000_000) 
                 Self.simulatePaste()
                 Diagnostics.log("PopupButton: pasted optimized prompt")
             } catch {
