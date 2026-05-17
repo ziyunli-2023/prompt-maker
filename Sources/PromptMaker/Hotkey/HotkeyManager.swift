@@ -5,86 +5,66 @@ import Foundation
 @MainActor
 final class HotkeyManager {
     private weak var panel: FloatingPanel?
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    private var hotKeyRef: EventHotKeyRef?
     private var currentSpec: HotkeySpec?
-    private var accessibilityTimer: Timer?
-    private var wasAccessibilityTrusted: Bool = false
 
     init(panel: FloatingPanel) {
         self.panel = panel
+        setupCarbonEventHandler()
         rebind(to: HotkeyPrefs.load())
-        startAccessibilityPolling()
+    }
+
+    private func setupCarbonEventHandler() {
+        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        
+        let ptr = Unmanaged.passUnretained(self).toOpaque()
+        
+        InstallEventHandler(GetApplicationEventTarget(), { (nextHandler, theEvent, userData) -> OSStatus in
+            guard let theEvent = theEvent, let userData = userData else { return OSStatus(eventNotHandledErr) }
+            
+            var hotKeyID = EventHotKeyID()
+            let err = GetEventParameter(theEvent,
+                                        EventParamName(kEventParamDirectObject),
+                                        EventParamType(typeEventHotKeyID),
+                                        nil,
+                                        MemoryLayout<EventHotKeyID>.size,
+                                        nil,
+                                        &hotKeyID)
+            
+            if err == noErr && hotKeyID.signature == 1337 {
+                let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+                Task { @MainActor in manager.fire() }
+                return noErr // We handled it, stop propagation
+            }
+            return OSStatus(eventNotHandledErr)
+        }, 1, &eventType, ptr, nil)
     }
 
     func rebind(to spec: HotkeySpec) {
-        teardownMonitors()
+        if let ref = hotKeyRef {
+            UnregisterEventHotKey(ref)
+            hotKeyRef = nil
+        }
+        
         currentSpec = spec
         HotkeyPrefs.save(spec)
-
-        let mask = HotkeySpec.nsFlags(from: spec.modifiers)
-        let keyCode = UInt16(spec.keyCode)
-
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            Diagnostics.log("global keyDown kc=\(event.keyCode) flags=\(event.modifierFlags.rawValue)")
-            guard HotkeyManager.eventMatches(event, modifiers: mask, keyCode: keyCode) else { return }
-            Task { @MainActor in self?.fire() }
-        }
-
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            if HotkeyManager.eventMatches(event, modifiers: mask, keyCode: keyCode) {
-                Task { @MainActor in self?.fire() }
-                return nil
-            }
-            return event
-        }
-
-        let trusted = AccessibilityHelper.isTrusted
-        wasAccessibilityTrusted = trusted
-        Diagnostics.log("rebind via NSEvent — keyCode=\(spec.keyCode) mods=\(spec.modifiers) display=\(spec.displayString) accessibilityTrusted=\(trusted)")
-    }
-
-    /// Polls for Accessibility permission changes. When permission is newly
-    /// granted, re-registers the global monitor so it actually receives events.
-    private func startAccessibilityPolling() {
-        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.checkAccessibilityChange()
-            }
+        
+        let hotKeyID = EventHotKeyID(signature: 1337, id: 1)
+        var ref: EventHotKeyRef?
+        // RegisterEventHotKey registers a global intercept that overrides other apps!
+        let err = RegisterEventHotKey(spec.keyCode, spec.modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        
+        if err == noErr {
+            hotKeyRef = ref
+            Diagnostics.log("Carbon Hotkey registered: \(spec.displayString)")
+        } else {
+            Diagnostics.log("Failed to register Carbon Hotkey. Error: \(err)")
         }
     }
 
-    private func checkAccessibilityChange() {
-        let trusted = AccessibilityHelper.isTrusted
-        if trusted && !wasAccessibilityTrusted {
-            Diagnostics.log("Accessibility permission newly granted — re-registering hotkey monitors")
-            if let spec = currentSpec {
-                rebind(to: spec)
-            }
-        }
-        wasAccessibilityTrusted = trusted
-        // Stop polling once trusted — permission won't be revoked while running
-        if trusted {
-            accessibilityTimer?.invalidate()
-            accessibilityTimer = nil
-        }
-    }
-
-    private func fire() {
-        Diagnostics.log("hotkey fired")
+    func fire() {
+        Diagnostics.log("hotkey fired via Carbon")
         panel?.toggle()
-    }
-
-    private func teardownMonitors() {
-        if let m = globalMonitor { NSEvent.removeMonitor(m); globalMonitor = nil }
-        if let m = localMonitor  { NSEvent.removeMonitor(m); localMonitor  = nil }
-    }
-
-    private static func eventMatches(_ event: NSEvent, modifiers: NSEvent.ModifierFlags, keyCode: UInt16) -> Bool {
-        guard event.keyCode == keyCode else { return false }
-        let masked = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let relevant: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
-        return masked.intersection(relevant) == modifiers
     }
 }
 

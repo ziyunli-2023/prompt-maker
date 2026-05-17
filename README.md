@@ -5,7 +5,7 @@ A lightweight macOS menu-bar app that turns Chinese/English mixed-language draft
 ## Features
 
 - Menu bar only — no Dock icon
-- Global hotkey to summon/dismiss the floating panel (default ⌃⌥P)
+- Global hotkey to summon/dismiss the floating panel (default ⌘⇧M)
 - Two-column result: **translation** (word-for-word faithful) + **optimized** (polished English)
 - Both columns are editable; optimized auto-copies to clipboard on submit
 - Up to 100 history entries, click any to restore
@@ -36,7 +36,7 @@ xcode-select --install
 
    First build takes ~30 seconds. A ✨ icon appears in the menu bar.
 
-3. **Grant Accessibility** when prompted (required for the global hotkey).
+3. **Grant Accessibility** when prompted (required for the text-selection ✨ popup. The global hotkey uses Carbon and works natively without permissions).
 
 Press **⌃⌥P** to summon the panel:
 
@@ -102,7 +102,7 @@ Sources/PromptMaker/
 ├── PromptMakerApp.swift          # @main, MenuBarExtra, AppDelegate
 ├── Secrets.swift                 # gitignored — DeepSeek API key
 ├── Hotkey/
-│   ├── HotkeyManager.swift       # NSEvent global/local monitors
+│   ├── HotkeyManager.swift       # Carbon RegisterEventHotKey global intercept
 │   └── HotkeySpec.swift          # Persistence + display string
 ├── UI/
 │   ├── FloatingPanel.swift       # NSPanel (.floating, nonactivating)
@@ -124,6 +124,6 @@ Scripts/build_app.sh              # Wraps binary in .app bundle
 
 ## Known limitations
 
-- Global hotkey requires Accessibility permission; macOS revokes it on every rebuild (ad-hoc codesign changes the hash). Use the menu bar icon as a workaround, or build a proper signed .app.
+- The text-selection ✨ popup requires Accessibility permission; macOS revokes it on every rebuild (ad-hoc codesign changes the hash). Use `tccutil reset Accessibility com.local.promptmaker` if it gets permanently stuck during development.
 - No streaming output — single blocking request
 - No iCloud sync, no multi-language UI, no in-place text substitution
