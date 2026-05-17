@@ -29,12 +29,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         Diagnostics.log("applicationDidFinishLaunching — initializing AppContext")
-        _ = AppContext.shared
-        Diagnostics.log("AppContext initialized, accessibility=\(AccessibilityHelper.isTrusted)")
+        // Prompt for Accessibility BEFORE initializing the hotkey manager.
+        // This gives the user a chance to grant permission so the global
+        // monitor works on first registration.
         if !AccessibilityHelper.isTrusted {
-            // Prompt user; this opens the System Settings dialog the first time.
             AccessibilityHelper.promptIfNeeded()
         }
+        _ = AppContext.shared
+        Diagnostics.log("AppContext initialized, accessibility=\(AccessibilityHelper.isTrusted)")
     }
 }
 
@@ -46,6 +48,7 @@ final class AppContext {
     let historyStore: HistoryStore
     let floatingPanel: FloatingPanel
     let hotkeyManager: HotkeyManager
+    let selectionMonitor: SelectionMonitor
     private var settingsWindow: NSWindow?
 
     private init() {
@@ -56,6 +59,7 @@ final class AppContext {
         self.historyStore = historyStore
         self.floatingPanel = panel
         self.hotkeyManager = HotkeyManager(panel: panel)
+        self.selectionMonitor = SelectionMonitor(historyStore: historyStore)
     }
 
     func openSettings() {

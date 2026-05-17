@@ -7,8 +7,8 @@ struct HotkeySpec: Codable, Equatable, Sendable {
     var keyCode: UInt32
 
     static let `default` = HotkeySpec(
-        modifiers: UInt32(controlKey) | UInt32(optionKey),
-        keyCode: UInt32(kVK_ANSI_P)
+        modifiers: UInt32(cmdKey) | UInt32(shiftKey),
+        keyCode: UInt32(kVK_ANSI_Y)
     )
 
     var displayString: String {

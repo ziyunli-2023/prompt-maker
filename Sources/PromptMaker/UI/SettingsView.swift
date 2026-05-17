@@ -5,6 +5,7 @@ import Carbon.HIToolbox
 struct SettingsView: View {
     @AppStorage("backend") private var backend: String = "deepseek"
     @AppStorage("autoFillFromClipboard") private var autoFill: Bool = true
+    @AppStorage("selectionPopupEnabled") private var selectionPopup: Bool = true
     @AppStorage("geminiModel") private var geminiModel: String = ""
     @State private var geminiKey: String = KeychainHelper.shared.read(key: "geminiAPIKey") ?? ""
     @State private var deepseekKey: String = KeychainHelper.shared.read(key: "deepseekAPIKey") ?? ""
@@ -77,6 +78,10 @@ struct SettingsView: View {
 
             Section("行为") {
                 Toggle("唤起时自动从剪贴板预填", isOn: $autoFill)
+                Toggle("选中文字后显示优化按钮", isOn: $selectionPopup)
+                    .onChange(of: selectionPopup) { newValue in
+                        AppContext.shared.selectionMonitor.setEnabled(newValue)
+                    }
             }
         }
         .formStyle(.grouped)

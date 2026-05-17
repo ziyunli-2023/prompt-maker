@@ -8,10 +8,13 @@ final class HotkeyManager {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var currentSpec: HotkeySpec?
+    private var accessibilityTimer: Timer?
+    private var wasAccessibilityTrusted: Bool = false
 
     init(panel: FloatingPanel) {
         self.panel = panel
         rebind(to: HotkeyPrefs.load())
+        startAccessibilityPolling()
     }
 
     func rebind(to spec: HotkeySpec) {
@@ -37,7 +40,34 @@ final class HotkeyManager {
         }
 
         let trusted = AccessibilityHelper.isTrusted
+        wasAccessibilityTrusted = trusted
         Diagnostics.log("rebind via NSEvent — keyCode=\(spec.keyCode) mods=\(spec.modifiers) display=\(spec.displayString) accessibilityTrusted=\(trusted)")
+    }
+
+    /// Polls for Accessibility permission changes. When permission is newly
+    /// granted, re-registers the global monitor so it actually receives events.
+    private func startAccessibilityPolling() {
+        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkAccessibilityChange()
+            }
+        }
+    }
+
+    private func checkAccessibilityChange() {
+        let trusted = AccessibilityHelper.isTrusted
+        if trusted && !wasAccessibilityTrusted {
+            Diagnostics.log("Accessibility permission newly granted — re-registering hotkey monitors")
+            if let spec = currentSpec {
+                rebind(to: spec)
+            }
+        }
+        wasAccessibilityTrusted = trusted
+        // Stop polling once trusted — permission won't be revoked while running
+        if trusted {
+            accessibilityTimer?.invalidate()
+            accessibilityTimer = nil
+        }
     }
 
     private func fire() {
