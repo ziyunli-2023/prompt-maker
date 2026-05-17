@@ -38,7 +38,7 @@ xcode-select --install
 
 3. **Grant Accessibility** when prompted (required for the text-selection ✨ popup. The global hotkey uses Carbon and works natively without permissions).
 
-Press **⌃⌥P** to summon the panel:
+Press **⌘⇧M** to summon the panel:
 
 - Input field auto-focuses; clipboard text is pre-filled if it's under 2000 characters (configurable)
 - **⌘↩** to submit
