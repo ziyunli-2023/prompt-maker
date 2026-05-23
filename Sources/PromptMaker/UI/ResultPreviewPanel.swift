@@ -7,68 +7,82 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
     private let textView: NSTextView
     private let followUpField: NSTextField
     private let progressIndicator: NSProgressIndicator
-    private let pasteButton: NSButton
-    private let closeButton: NSButton
+    private let menuButton: NSButton
+    private let sendButton: NSButton
 
     private var currentText: String = ""
     private var inFlight: Bool = false
     private var outsideClickMonitor: Any?
 
+    private let panelWidth: CGFloat = 460
+    private let panelHeight: CGFloat = 280
+    private let cornerRadius: CGFloat = 14
+    private let padding: CGFloat = 16
+    private let inputHeight: CGFloat = 36
+
     init(historyStore: HistoryStore) {
         self.historyStore = historyStore
 
-        let width: CGFloat = 460
-        let height: CGFloat = 300
-
+        // Result text view (no border, no background of its own — blends with panel)
+        let scrollFrame = NSRect.zero
         let sv = NSTextView.scrollableTextView()
-        sv.frame = NSRect(x: 12, y: 92, width: width - 24, height: height - 110)
-        sv.autoresizingMask = [.width, .height]
-        sv.borderType = .lineBorder
+        sv.frame = scrollFrame
+        sv.borderType = .noBorder
+        sv.drawsBackground = false
+        sv.hasVerticalScroller = true
+        sv.scrollerStyle = .overlay
+        sv.autohidesScrollers = true
         let tv = sv.documentView as! NSTextView
         tv.isEditable = false
         tv.isSelectable = true
-        tv.font = NSFont.systemFont(ofSize: 13)
-        tv.textContainerInset = NSSize(width: 6, height: 6)
-        tv.drawsBackground = true
-        tv.backgroundColor = .textBackgroundColor
+        tv.font = NSFont.systemFont(ofSize: 14)
+        tv.textColor = .labelColor
+        tv.drawsBackground = false
+        tv.textContainerInset = NSSize(width: 4, height: 4)
         self.textView = tv
 
-        let follow = NSTextField(frame: NSRect(x: 12, y: 50, width: width - 56, height: 26))
-        follow.placeholderString = "继续改写… 回车提交"
+        // Follow-up pill input
+        let follow = PillTextField()
+        follow.placeholderString = "Refine further…"
         follow.font = NSFont.systemFont(ofSize: 13)
         follow.bezelStyle = .roundedBezel
+        follow.isBezeled = false
+        follow.isBordered = false
+        follow.drawsBackground = false
         follow.focusRingType = .none
-        follow.autoresizingMask = [.width, .maxYMargin]
         self.followUpField = follow
 
-        let pi = NSProgressIndicator(frame: NSRect(x: width - 36, y: 54, width: 18, height: 18))
+        // Send arrow button (right of input)
+        let send = NSButton(frame: .zero)
+        send.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: "Send")
+        send.bezelStyle = .circular
+        send.isBordered = false
+        send.imagePosition = .imageOnly
+        send.contentTintColor = .controlAccentColor
+        self.sendButton = send
+
+        // Loading indicator (overlaps send button when inFlight)
+        let pi = NSProgressIndicator(frame: .zero)
         pi.style = .spinning
         pi.controlSize = .small
         pi.isDisplayedWhenStopped = false
-        pi.autoresizingMask = [.minXMargin, .maxYMargin]
         self.progressIndicator = pi
 
-        let paste = NSButton(title: "粘贴", target: nil, action: nil)
-        paste.frame = NSRect(x: width - 90, y: 10, width: 78, height: 28)
-        paste.bezelStyle = .rounded
-        paste.keyEquivalent = "\r"
-        paste.autoresizingMask = [.minXMargin, .maxYMargin]
-        self.pasteButton = paste
-
-        let close = NSButton(title: "关闭", target: nil, action: nil)
-        close.frame = NSRect(x: width - 180, y: 10, width: 78, height: 28)
-        close.bezelStyle = .rounded
-        close.keyEquivalent = "\u{1b}"
-        close.autoresizingMask = [.minXMargin, .maxYMargin]
-        self.closeButton = close
+        // Top-right ⋯ menu button (paste/close)
+        let menu = NSButton(frame: .zero)
+        menu.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Actions")
+        menu.bezelStyle = .circular
+        menu.isBordered = false
+        menu.imagePosition = .imageOnly
+        menu.contentTintColor = .secondaryLabelColor
+        self.menuButton = menu
 
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
-            styleMask: [.nonactivatingPanel, .titled, .closable, .resizable, .utilityWindow],
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
+            styleMask: [.nonactivatingPanel, .borderless, .resizable],
             backing: .buffered,
             defer: false
         )
-        self.title = "结果"
         self.level = .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.hidesOnDeactivate = false
@@ -76,23 +90,81 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
         self.hasShadow = true
         self.isFloatingPanel = true
         self.becomesKeyOnlyIfNeeded = false
+        self.isOpaque = false
+        self.backgroundColor = .clear
+        self.minSize = NSSize(width: 340, height: 200)
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        container.autoresizingMask = [.width, .height]
-        container.addSubview(sv)
-        container.addSubview(follow)
-        container.addSubview(pi)
-        container.addSubview(paste)
-        container.addSubview(close)
-        self.contentView = container
+        // Vibrancy background with rounded corners
+        let blur = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
+        blur.material = .hudWindow
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.autoresizingMask = [.width, .height]
+        blur.wantsLayer = true
+        blur.layer?.cornerRadius = cornerRadius
+        blur.layer?.masksToBounds = true
+        blur.layer?.borderWidth = 0.5
+        blur.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
 
-        paste.target = self
-        paste.action = #selector(handlePaste)
-        close.target = self
-        close.action = #selector(handleDismiss)
+        // Layout
+        let menuSize: CGFloat = 22
+        menu.frame = NSRect(x: panelWidth - padding - menuSize, y: panelHeight - padding - menuSize,
+                            width: menuSize, height: menuSize)
+        menu.autoresizingMask = [.minXMargin, .minYMargin]
+
+        let inputAreaY: CGFloat = padding
+        let inputAreaHeight: CGFloat = inputHeight
+        let textAreaY = inputAreaY + inputAreaHeight + 12
+        let textAreaHeight = panelHeight - textAreaY - padding - menuSize - 4
+        sv.frame = NSRect(x: padding, y: textAreaY, width: panelWidth - padding * 2, height: textAreaHeight)
+        sv.autoresizingMask = [.width, .height]
+
+        // Pill input container
+        let pill = PillContainerView(frame: NSRect(x: padding, y: inputAreaY,
+                                                   width: panelWidth - padding * 2, height: inputAreaHeight))
+        pill.autoresizingMask = [.width, .maxYMargin]
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = inputAreaHeight / 2
+        pill.layer?.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.6).cgColor
+        pill.layer?.borderWidth = 0.5
+        pill.layer?.borderColor = NSColor.separatorColor.cgColor
+
+        let sendSize: CGFloat = 26
+        follow.frame = NSRect(x: 14, y: (inputAreaHeight - 20) / 2,
+                              width: pill.frame.width - sendSize - 28, height: 20)
+        follow.autoresizingMask = [.width]
+
+        send.frame = NSRect(x: pill.frame.width - sendSize - 5, y: (inputAreaHeight - sendSize) / 2,
+                            width: sendSize, height: sendSize)
+        send.autoresizingMask = [.minXMargin]
+
+        pi.frame = send.frame
+        pi.autoresizingMask = [.minXMargin]
+
+        pill.addSubview(follow)
+        pill.addSubview(send)
+        pill.addSubview(pi)
+
+        blur.addSubview(sv)
+        blur.addSubview(pill)
+        blur.addSubview(menu)
+
+        self.contentView = blur
+
+        send.target = self
+        send.action = #selector(handleFollowUp)
+        menu.target = self
+        menu.action = #selector(showActionsMenu(_:))
         follow.target = self
         follow.action = #selector(handleFollowUp)
         follow.delegate = self
+    }
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        handleDismiss()
     }
 
     nonisolated func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -101,13 +173,6 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
             return true
         }
         return false
-    }
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func cancelOperation(_ sender: Any?) {
-        handleDismiss()
     }
 
     func showResult(_ text: String, near point: NSPoint) {
@@ -136,13 +201,37 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
         }
     }
 
+    @objc private func showActionsMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        let pasteItem = NSMenuItem(title: "Paste to source app", action: #selector(handlePaste), keyEquivalent: "")
+        pasteItem.target = self
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(handleCopy), keyEquivalent: "")
+        copyItem.target = self
+        let closeItem = NSMenuItem(title: "Close", action: #selector(handleDismiss), keyEquivalent: "")
+        closeItem.target = self
+        menu.addItem(pasteItem)
+        menu.addItem(copyItem)
+        menu.addItem(.separator())
+        menu.addItem(closeItem)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 2), in: sender)
+    }
+
     @objc private func handlePaste() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(currentText, forType: .string)
         removeOutsideClickMonitor()
         orderOut(nil)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 200_000_000)
             PopupButton.simulatePaste()
         }
+    }
+
+    @objc private func handleCopy() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(currentText, forType: .string)
     }
 
     @objc private func handleDismiss() {
@@ -159,6 +248,7 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
 
         inFlight = true
         followUpField.isEnabled = false
+        sendButton.isHidden = true
         progressIndicator.startAnimation(nil)
 
         Task { @MainActor in
@@ -173,6 +263,7 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
 
             self.inFlight = false
             self.followUpField.isEnabled = true
+            self.sendButton.isHidden = false
             self.progressIndicator.stopAnimation(nil)
 
             guard let out = output, !out.isEmpty else { return }
@@ -204,4 +295,14 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
         if y + frame.height > screen.maxY { y = screen.maxY - frame.height - 8 }
         return NSPoint(x: x, y: y)
     }
+}
+
+// MARK: - Pill subviews
+
+private final class PillContainerView: NSView {
+    override var allowsVibrancy: Bool { true }
+}
+
+private final class PillTextField: NSTextField {
+    override var allowsVibrancy: Bool { true }
 }

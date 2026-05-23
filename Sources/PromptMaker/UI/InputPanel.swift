@@ -9,34 +9,45 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
     private var anchorPoint: NSPoint = .zero
 
     private let textField: NSTextField
+    private let sendButton: NSButton
     private let progressIndicator: NSProgressIndicator
     private var inFlight: Bool = false
+
+    private let panelWidth: CGFloat = 380
+    private let panelHeight: CGFloat = 56
+    private let cornerRadius: CGFloat = 14
+    private let padding: CGFloat = 10
+    private let inputHeight: CGFloat = 36
 
     init(historyStore: HistoryStore, resultPanel: ResultPreviewPanel) {
         self.historyStore = historyStore
         self.resultPanel = resultPanel
 
-        let width: CGFloat = 360
-        let height: CGFloat = 40
-
-        let tf = NSTextField(frame: NSRect(x: 10, y: 8, width: width - 50, height: 24))
-        tf.placeholderString = "回车=优化;输入指令=翻译/总结/改写…"
+        let tf = InputPillTextField()
+        tf.placeholderString = "Enter to optimize · type instruction to translate / summarize / rewrite…"
         tf.font = NSFont.systemFont(ofSize: 13)
-        tf.bezelStyle = .roundedBezel
+        tf.isBezeled = false
+        tf.isBordered = false
+        tf.drawsBackground = false
         tf.focusRingType = .none
-        tf.isBordered = true
-        tf.drawsBackground = true
-        tf.backgroundColor = .textBackgroundColor
         self.textField = tf
 
-        let pi = NSProgressIndicator(frame: NSRect(x: width - 32, y: 12, width: 16, height: 16))
+        let send = NSButton(frame: .zero)
+        send.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: "Send")
+        send.bezelStyle = .circular
+        send.isBordered = false
+        send.imagePosition = .imageOnly
+        send.contentTintColor = .controlAccentColor
+        self.sendButton = send
+
+        let pi = NSProgressIndicator(frame: .zero)
         pi.style = .spinning
         pi.controlSize = .small
         pi.isDisplayedWhenStopped = false
         self.progressIndicator = pi
 
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
@@ -51,19 +62,58 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
         self.isFloatingPanel = true
         self.becomesKeyOnlyIfNeeded = false
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        container.wantsLayer = true
-        container.layer?.cornerRadius = 8
-        container.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        container.layer?.borderColor = NSColor.separatorColor.cgColor
-        container.layer?.borderWidth = 0.5
-        container.addSubview(tf)
-        container.addSubview(pi)
-        self.contentView = container
+        // Vibrancy background with rounded corners
+        let blur = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
+        blur.material = .hudWindow
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.autoresizingMask = [.width, .height]
+        blur.wantsLayer = true
+        blur.layer?.cornerRadius = cornerRadius
+        blur.layer?.masksToBounds = true
+        blur.layer?.borderWidth = 0.5
+        blur.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
+
+        // Pill container
+        let pill = InputPillContainerView(frame: NSRect(x: padding, y: (panelHeight - inputHeight) / 2,
+                                                        width: panelWidth - padding * 2, height: inputHeight))
+        pill.autoresizingMask = [.width]
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = inputHeight / 2
+        pill.layer?.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.6).cgColor
+        pill.layer?.borderWidth = 0.5
+        pill.layer?.borderColor = NSColor.separatorColor.cgColor
+
+        let sendSize: CGFloat = 26
+        tf.frame = NSRect(x: 14, y: (inputHeight - 20) / 2,
+                          width: pill.frame.width - sendSize - 28, height: 20)
+        tf.autoresizingMask = [.width]
+
+        send.frame = NSRect(x: pill.frame.width - sendSize - 5, y: (inputHeight - sendSize) / 2,
+                            width: sendSize, height: sendSize)
+        send.autoresizingMask = [.minXMargin]
+
+        pi.frame = send.frame
+        pi.autoresizingMask = [.minXMargin]
+
+        pill.addSubview(tf)
+        pill.addSubview(send)
+        pill.addSubview(pi)
+        blur.addSubview(pill)
+        self.contentView = blur
 
         tf.target = self
         tf.action = #selector(handleSubmit)
         tf.delegate = self
+        send.target = self
+        send.action = #selector(handleSubmit)
+    }
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        hide()
     }
 
     nonisolated func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -72,13 +122,6 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
             return true
         }
         return false
-    }
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func cancelOperation(_ sender: Any?) {
-        hide()
     }
 
     func showAt(point: NSPoint, selectedText: String) {
@@ -102,13 +145,13 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
 
         inFlight = true
         textField.isEnabled = false
+        sendButton.isHidden = true
         progressIndicator.startAnimation(nil)
 
         Task { @MainActor in
             let service = ServiceFactory.make()
 
             if instruction.isEmpty {
-                // Empty input = default optimize, direct paste, no preview window
                 do {
                     let result = try await service.complete(input: text)
                     let pb = NSPasteboard.general
@@ -135,7 +178,6 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
                 return
             }
 
-            // Custom instruction → call customComplete, show preview
             let output: String?
             do {
                 output = try await service.customComplete(input: text, instruction: instruction)
@@ -171,6 +213,17 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
     private func finishInput() {
         inFlight = false
         textField.isEnabled = true
+        sendButton.isHidden = false
         progressIndicator.stopAnimation(nil)
     }
+}
+
+// MARK: - Pill subviews
+
+private final class InputPillContainerView: NSView {
+    override var allowsVibrancy: Bool { true }
+}
+
+private final class InputPillTextField: NSTextField {
+    override var allowsVibrancy: Bool { true }
 }
