@@ -1,60 +1,85 @@
-# PromptMaker
+# PromptMaker ✨
 
-A lightweight macOS menu-bar app that turns Chinese/English mixed-language drafts into polished English prompts in one keystroke. It produces two outputs side-by-side — a faithful literal translation and a grammar-corrected, idiomatic version — and auto-copies the optimized version to your clipboard so you can paste it straight into Claude or ChatGPT.
+**Select text anywhere on macOS. Get a polished English prompt in your clipboard. One keystroke. One click.**
 
-## Features
+PromptMaker is a tiny menu-bar app that turns rough, mixed Chinese/English drafts into clean, idiomatic English — ready to paste into Claude, ChatGPT, Gemini, or any LLM. It lives in your menu bar, weighs nothing, and disappears the moment you're done with it.
 
-- Menu bar only — no Dock icon
-- Global hotkey to summon/dismiss the floating panel (default ⌘⇧M)
-- Two-column result: **translation** (word-for-word faithful) + **optimized** (polished English)
-- Both columns are editable; optimized auto-copies to clipboard on submit
-- Up to 100 history entries, click any to restore
-- Powered by DeepSeek API (`deepseek-chat`, temperature 0)
+---
 
-## Prerequisites
+## Why you'll like it
 
-macOS 13 (Ventura) or later, Xcode Command Line Tools:
+- ⚡ **Two ways in, zero friction.** Hit a global hotkey (`⌘⇧M`) anywhere, or just *select text* in any app — Safari, Chrome, VS Code, Notes, Slack — and a ✨ icon pops up next to your cursor.
+- 🪄 **Short click = instant magic.** Click ✨ once → text is optimized → auto-pasted back in place. The original mess is gone, the polished version is there. No window. No copy-paste dance.
+- 🧠 **Long-press = "do whatever I say."** Hold ✨ for a beat and a tiny input pill appears: *"summarize in one sentence"*, *"rewrite as a Cursor prompt"*, *"translate to French"*. Type your instruction, hit Enter, done.
+- 🔁 **Refine in place.** The result panel has a follow-up box — keep iterating without retyping your text.
+- 📋 **Side-by-side translation.** For the default optimize flow, you see both a *literal* translation and the *idiomatic* one. Pick whichever you trust.
+- 🕘 **Last 100 prompts, one keystroke away.** Click any entry to restore it.
+- 🔌 **Pluggable backend.** Ships with DeepSeek (cheap, fast, great at Chinese). Swap in Gemini API or Gemini CLI from Settings without rebuilding.
+- 🪶 **5 MB binary. No Electron. No background CPU.** Pure Swift + AppKit. Menu-bar only, no Dock clutter.
 
-```sh
-xcode-select --install
+---
+
+## The 60-second tour
+
+```text
+        ┌─────────────────────────────────────────────┐
+        │  ⌘⇧M  anywhere  →  floating panel           │
+        │                                             │
+        │   ┌─────────────────────────────────────┐   │
+        │   │ paste your messy draft here…       │   │
+        │   └─────────────────────────────────────┘   │
+        │                                             │
+        │   ┌─── translation ───┬── optimized ───┐    │
+        │   │ word-for-word      │ idiomatic EN  │    │
+        │   │ faithful           │ ← clipboard   │    │
+        │   └────────────────────┴───────────────┘    │
+        └─────────────────────────────────────────────┘
+
+   …or just  ⌃ drag-select text  →  ✨ pops up
+                  ↳ click   → optimize + auto-paste
+                  ↳ hold    → custom instruction
 ```
 
-## Setup
+---
 
-1. **Add your API key** — copy the example secrets file and fill in your [DeepSeek API key](https://platform.deepseek.com/api_keys):
+## Get started in 90 seconds
 
-   ```sh
-   cp Secrets.example.swift Sources/PromptMaker/Secrets.swift
-   # edit Secrets.swift and replace the placeholder with your real key
-   ```
+**Requirements:** macOS 13 (Ventura) or later, Xcode CLT (`xcode-select --install`).
 
-2. **Build and run:**
-
-   ```sh
-   swift run -c release
-   ```
-
-   First build takes ~30 seconds. A ✨ icon appears in the menu bar.
-
-3. **Grant Accessibility** when prompted (required for the text-selection ✨ popup. The global hotkey uses Carbon and works natively without permissions).
-
-Press **⌘⇧M** to summon the panel:
-
-- Input field auto-focuses; clipboard text is pre-filled if it's under 2000 characters (configurable)
-- **⌘↩** to submit
-- **Esc** to dismiss
-- Top-right icons: history drawer, new entry, close
-
-## Background / auto-start
-
-`swift run -c release` is foreground. To keep it running:
-
-**Option A — background process**
 ```sh
-nohup .build/release/PromptMaker > /tmp/promptmaker.log 2>&1 &
+# 1. Drop in your API key (DeepSeek is the default; ~$0.001 per prompt)
+cp Secrets.example.swift Sources/PromptMaker/Secrets.swift
+#    → edit Secrets.swift, paste your key from
+#      https://platform.deepseek.com/api_keys
+
+# 2. Build a proper .app bundle (needed for global hotkeys on Sequoia+)
+./Scripts/build_app.sh release
+
+# 3. Launch
+open build/PromptMaker.app
 ```
 
-**Option B — LaunchAgent (starts at login)**
+A ✨ icon shows up in your menu bar. macOS will ask for **Accessibility** permission — grant it so the selection popup can read text from any app.
+
+Press **⌘⇧M** anywhere. Type or paste something. Hit `⌘↩`. That's the whole product.
+
+---
+
+## Keystrokes
+
+| Where | Key | What it does |
+|---|---|---|
+| anywhere | `⌘⇧M` | summon the floating panel (customizable in Settings) |
+| panel | `⌘↩` | submit (optimized version auto-copies to clipboard) |
+| panel | `Esc` | dismiss |
+| selection ✨ | click | optimize + auto-paste over your selection |
+| selection ✨ | long-press | open custom-instruction pill |
+| result panel | type + `↩` | refine the result further |
+
+---
+
+## Want it always-on? (LaunchAgent)
+
 ```sh
 cat > ~/Library/LaunchAgents/com.local.promptmaker.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -64,7 +89,7 @@ cat > ~/Library/LaunchAgents/com.local.promptmaker.plist <<EOF
   <key>Label</key><string>com.local.promptmaker</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$(pwd)/.build/release/PromptMaker</string>
+    <string>$(pwd)/build/PromptMaker.app/Contents/MacOS/PromptMaker</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -76,54 +101,99 @@ EOF
 launchctl load ~/Library/LaunchAgents/com.local.promptmaker.plist
 ```
 
-To unload: `launchctl unload ~/Library/LaunchAgents/com.local.promptmaker.plist`
+Boots silently at login. Unload with `launchctl unload …` if you change your mind.
 
-## Data locations
+---
 
-| What | Where |
+## Picking a backend
+
+Open **Settings** from the menu-bar icon (or `⌘,` from the panel):
+
+| Backend | Pros | Notes |
+|---|---|---|
+| **DeepSeek** (default) | cheap, fast, strong on Chinese↔English | needs API key |
+| **Gemini API** | great general quality, free tier | needs API key |
+| **Gemini CLI** | uses your local `gemini` install, no key in app | requires `gemini` on `PATH` |
+
+API keys can live in `Secrets.swift` (build-time) or in **Keychain** via the Settings window (recommended).
+
+---
+
+## What it *won't* do to your prompt
+
+PromptMaker is deliberately conservative. The system prompt (see `Sources/PromptMaker/Services/AICompletionService.swift`) enforces:
+
+- ✅ Fix grammar, use idiomatic phrasing, accurate terminology
+- ❌ **Never** add role framing (*"You are an expert…"*)
+- ❌ **Never** add output-format instructions you didn't write (*"Output in markdown…"*)
+- ❌ No invented context, no added scope, no hallucinated assumptions
+- ✅ Sentence count and length stay close to the original
+
+Your intent goes in, the same intent comes out — just sharper.
+
+---
+
+## Where your stuff lives
+
+| | Path |
 |---|---|
-| History | `~/Library/Application Support/PromptMaker/history.json` |
+| History (last 100) | `~/Library/Application Support/PromptMaker/history.json` |
 | Preferences | `~/Library/Preferences/PromptMaker.plist` |
-| API key (if stored via Settings) | Keychain — service `PromptMaker`, account `deepseekAPIKey` |
+| API key (Keychain) | service `PromptMaker`, account `deepseekAPIKey` |
+| Diagnostic log | `/tmp/promptmaker.log` |
 
-## Optimization rules
+---
 
-The system prompt lives in `Sources/PromptMaker/Services/AICompletionService.swift` (`SYSTEM_PROMPT`). Current rules:
-
-- Fix grammar, use idiomatic phrasing, use accurate terminology
-- **Never** inject role framing (`You are an expert…`) or output-format instructions (`Output in markdown…`) not present in the source
-- No added context, scope, or assumptions — only refine language
-- Sentence count and length stay close to the original
-
-## Project structure
+## Under the hood
 
 ```
 Sources/PromptMaker/
-├── PromptMakerApp.swift          # @main, MenuBarExtra, AppDelegate
-├── Secrets.swift                 # gitignored — DeepSeek API key
+├── PromptMakerApp.swift          @main · MenuBarExtra · AppDelegate
 ├── Hotkey/
-│   ├── HotkeyManager.swift       # Carbon RegisterEventHotKey global intercept
-│   └── HotkeySpec.swift          # Persistence + display string
+│   ├── HotkeyManager.swift       Carbon RegisterEventHotKey (works on Sequoia)
+│   └── HotkeySpec.swift          persisted shortcut + display string
 ├── UI/
-│   ├── FloatingPanel.swift       # NSPanel (.floating, nonactivating)
-│   ├── PromptView.swift          # Main interaction
-│   └── SettingsView.swift        # Backend / hotkey / clipboard toggle
+│   ├── FloatingPanel.swift       main NSPanel (.floating, nonactivating)
+│   ├── PromptView.swift          two-column input/output
+│   ├── SelectionMonitor.swift    global mouse listener + AX text scraping
+│   ├── PopupButton.swift         the ✨ icon (short click vs long press)
+│   ├── InputPanel.swift          long-press instruction pill
+│   ├── ResultPreviewPanel.swift  result + follow-up refinement
+│   └── SettingsView.swift        backend, hotkey, clipboard prefill toggle
 ├── Services/
-│   ├── AICompletionService.swift # Protocol + SYSTEM_PROMPT + JSON parsing
-│   ├── DeepSeekService.swift     # URLSession → DeepSeek chat completions
-│   ├── GeminiAPIService.swift    # Gemini API fallback
-│   ├── GeminiCLIService.swift    # Gemini CLI fallback
-│   └── ServiceFactory.swift      # Selects backend from UserDefaults
+│   ├── AICompletionService.swift protocol + SYSTEM_PROMPT + JSON parsing
+│   ├── DeepSeekService.swift     URLSession → DeepSeek chat completions
+│   ├── GeminiAPIService.swift    Gemini REST
+│   ├── GeminiCLIService.swift    subprocess to local `gemini` CLI
+│   └── ServiceFactory.swift      chooses backend from UserDefaults
 └── Storage/
-    ├── PromptStore.swift         # @MainActor ObservableObject
-    ├── HistoryStore.swift        # JSON persistence
-    └── KeychainHelper.swift      # Keychain wrapper
-Secrets.example.swift             # Copy → Sources/PromptMaker/Secrets.swift
-Scripts/build_app.sh              # Wraps binary in .app bundle
+    ├── PromptStore.swift         current-session state
+    ├── HistoryStore.swift        JSON-on-disk persistence
+    └── KeychainHelper.swift      Keychain wrapper
 ```
 
-## Known limitations
+No frameworks beyond AppKit, SwiftUI (for the settings sheet), Carbon (for the hotkey), and ApplicationServices (for AX). That's it.
 
-- The text-selection ✨ popup requires Accessibility permission; macOS revokes it on every rebuild (ad-hoc codesign changes the hash). Use `tccutil reset Accessibility com.local.promptmaker` if it gets permanently stuck during development.
-- No streaming output — single blocking request
-- No iCloud sync, no multi-language UI, no in-place text substitution
+---
+
+## Known sharp edges
+
+- The ✨ popup needs **Accessibility** permission. macOS revokes it on every rebuild because ad-hoc codesigning changes the binary hash. If it gets stuck during development: `tccutil reset Accessibility com.local.promptmaker`, then re-grant.
+- For web pages (Chrome / Safari) accessibility doesn't expose selected text directly — PromptMaker falls back to a silent `⌘C` that backs up and restores your clipboard. Works, but third-party clipboard managers may notice the brief blip.
+- No streaming output yet — each request is a single blocking call. (PRs welcome.)
+- No iCloud history sync, no Windows/Linux port, no menu localization beyond English/Chinese hints in the placeholder text.
+
+---
+
+## Contributing
+
+Issues and PRs are welcome. The codebase is small (~1500 LOC of Swift) and easy to read top-to-bottom. Good first projects:
+
+- streaming output for the result panel
+- per-app backend overrides (e.g. always use Gemini in IDEs)
+- packaging via a signed `.dmg`
+- a Raycast/Alfred extension that fires the same pipeline
+
+---
+
+If PromptMaker saves you a few hundred copy-pastes a week, give the repo a ⭐. That's the whole funding model.

@@ -1,9 +1,52 @@
+# --- Swift / Xcode build artifacts ---
 .build/
 .swiftpm/
 Package.resolved
 *.xcodeproj/
 DerivedData/
-.DS_Store
-news.db
-Sources/PromptMaker/Secrets.swift
+xcuserdata/
+*.xcuserstate
 build/
+
+# --- macOS ---
+.DS_Store
+
+# --- Local data / runtime artifacts ---
+news.db
+*.log
+
+# --- Secrets: the real Secrets.swift, anywhere it lands ---
+Secrets.swift
+Sources/PromptMaker/Secrets.swift
+# …but keep the template tracked
+!Secrets.example.swift
+
+# --- Generic secret / credential files (defensive net) ---
+.env
+.env.*
+.envrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+credentials
+credentials.*
+*credentials.json
+*.secret
+*.secrets
+secrets.json
+secrets.yaml
+secrets.yml
+auth.json
+*_token
+*_token.txt
+*api_key*
+*apikey*
+.netrc
+
+# --- Local-only overrides ---
+*.local
+*.local.*
+config.local.*
