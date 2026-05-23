@@ -4,7 +4,10 @@ import Carbon.HIToolbox
 @MainActor
 final class PopupButton: NSPanel {
     private var selectedText: String = ""
+    private var anchorPoint: NSPoint = .zero
     private let historyStore: HistoryStore
+    private let inputPanel: InputPanel
+    private let resultPanel: ResultPreviewPanel
     private let imageView: NSImageView = {
         let view = NSImageView(frame: NSRect(x: 6, y: 6, width: 24, height: 24))
         view.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Optimize prompt")
@@ -12,7 +15,6 @@ final class PopupButton: NSPanel {
         view.imageScaling = .scaleProportionallyUpOrDown
         return view
     }()
-    
     private let progressIndicator: NSProgressIndicator = {
         let pi = NSProgressIndicator(frame: NSRect(x: 8, y: 8, width: 20, height: 20))
         pi.style = .spinning
@@ -23,6 +25,8 @@ final class PopupButton: NSPanel {
 
     init(historyStore: HistoryStore) {
         self.historyStore = historyStore
+        self.resultPanel = ResultPreviewPanel(historyStore: historyStore)
+        self.inputPanel = InputPanel(historyStore: historyStore, resultPanel: self.resultPanel)
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 36, height: 36),
             styleMask: [.nonactivatingPanel, .borderless],
@@ -36,8 +40,9 @@ final class PopupButton: NSPanel {
         self.backgroundColor = .clear
         self.isReleasedWhenClosed = false
 
-        let container = ClickableView(frame: NSRect(x: 0, y: 0, width: 36, height: 36))
-        container.onMouseDown = { [weak self] in self?.handleClick() }
+        let container = LongPressView(frame: NSRect(x: 0, y: 0, width: 36, height: 36))
+        container.onShortClick = { [weak self] in self?.handleShortClick() }
+        container.onLongPress  = { [weak self] in self?.handleLongPress() }
         container.wantsLayer = true
         container.layer?.cornerRadius = 8
         container.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
@@ -54,6 +59,7 @@ final class PopupButton: NSPanel {
 
     func showAt(point: NSPoint, selectedText: String) {
         self.selectedText = selectedText
+        self.anchorPoint = point
         self.setFrameOrigin(NSPoint(x: point.x - 18, y: point.y))
         self.orderFrontRegardless()
     }
@@ -62,43 +68,43 @@ final class PopupButton: NSPanel {
         self.orderOut(nil)
     }
 
-    private func handleClick() {
-        guard !imageView.isHidden else { return } // Prevent double clicks
-        
+    private func handleLongPress() {
         let text = selectedText
-        Diagnostics.log("PopupButton clicked, text length=\(text.count)")
+        let anchor = anchorPoint
+        Diagnostics.log("PopupButton long-press, text length=\(text.count)")
+        hide()
+        inputPanel.showAt(point: anchor, selectedText: text)
+    }
 
-        // Enter loading state
+    private func handleShortClick() {
+        guard !imageView.isHidden else { return }
+        let text = selectedText
+        Diagnostics.log("PopupButton short-click, text length=\(text.count)")
+
         imageView.isHidden = true
         progressIndicator.startAnimation(nil)
 
         Task { @MainActor in
             defer {
-                // Restore state and hide when done
                 self.imageView.isHidden = false
                 self.progressIndicator.stopAnimation(nil)
                 self.hide()
             }
-            
             let service = ServiceFactory.make()
             do {
                 let result = try await service.complete(input: text)
-                // Copy optimized result to clipboard
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString(result.optimized, forType: .string)
 
-                // Save to history
-                historyStore.add(HistoryEntry(
+                self.historyStore.add(HistoryEntry(
                     id: UUID(), timestamp: Date(),
                     input: text,
                     translation: result.translation,
                     optimized: result.optimized
                 ))
 
-                // Increase delay to 200ms to allow macOS pasteboard buffer to flush 
-                // before target app processes the Cmd+V keystroke (fixes race condition)
-                try? await Task.sleep(nanoseconds: 200_000_000) 
+                try? await Task.sleep(nanoseconds: 200_000_000)
                 Self.simulatePaste()
                 Diagnostics.log("PopupButton: pasted optimized prompt")
             } catch {
@@ -107,7 +113,7 @@ final class PopupButton: NSPanel {
         }
     }
 
-    private static func simulatePaste() {
+    static func simulatePaste() {
         let src = CGEventSource(stateID: .combinedSessionState)
         let vKey: CGKeyCode = CGKeyCode(kVK_ANSI_V)
         let down = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: true)
@@ -119,23 +125,39 @@ final class PopupButton: NSPanel {
     }
 }
 
-// MARK: - ClickableView
+// MARK: - LongPressView
 
-private class ClickableView: NSView {
-    var onMouseDown: (() -> Void)?
+private class LongPressView: NSView {
+    var onShortClick: (() -> Void)?
+    var onLongPress: (() -> Void)?
+    private var pressDownAt: Date = Date()
+    private var longPressTimer: Timer?
+    private var longPressFired: Bool = false
+    private let longPressThreshold: TimeInterval = 0.35
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        // Visual feedback
         layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+        pressDownAt = Date()
+        longPressFired = false
+        longPressTimer?.invalidate()
+        longPressTimer = Timer.scheduledTimer(withTimeInterval: longPressThreshold, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.longPressFired = true
+            self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            self.onLongPress?()
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
         layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        longPressTimer?.invalidate()
+        longPressTimer = nil
+        if longPressFired { return }
         let loc = convert(event.locationInWindow, from: nil)
         if bounds.contains(loc) {
-            onMouseDown?()
+            onShortClick?()
         }
     }
 }

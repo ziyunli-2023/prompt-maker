@@ -7,6 +7,7 @@ struct CompletionResult: Sendable {
 
 protocol AICompletionService: Sendable {
     func complete(input: String) async throws -> CompletionResult
+    func customComplete(input: String, instruction: String) async throws -> String
 }
 
 enum CompletionError: LocalizedError {
@@ -51,6 +52,10 @@ HARD CONSTRAINTS — violating any of these is a failure. The optimized version 
 When in doubt: change wording, not content. If unsure whether something belongs, leave it out.
 
 Output JSON only. No markdown fences. No commentary before or after.
+"""
+
+let CUSTOM_SYSTEM_PROMPT = """
+Apply the user's instruction to the given text. Output ONLY the transformed text — no preamble, no commentary, no markdown code fences, no explanation. If the instruction asks a question about the text, answer it directly. Preserve the original language unless the instruction specifies otherwise.
 """
 
 func parseCompletionJSON(_ raw: String) throws -> CompletionResult {
