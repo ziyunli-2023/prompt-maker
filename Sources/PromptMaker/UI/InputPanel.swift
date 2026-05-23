@@ -224,24 +224,25 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
             let service = ServiceFactory.make()
 
             if instruction.isEmpty {
+                let defaultInstruction = "翻译成中文"
                 do {
-                    let result = try await service.complete(input: text)
+                    let out = try await service.customComplete(input: text, instruction: defaultInstruction)
                     let pb = NSPasteboard.general
                     pb.clearContents()
-                    pb.setString(result.optimized, forType: .string)
+                    pb.setString(out, forType: .string)
 
                     self.historyStore.add(HistoryEntry(
                         id: UUID(), timestamp: Date(),
-                        input: text,
-                        translation: result.translation,
-                        optimized: result.optimized
+                        input: "[\(defaultInstruction)]\n\(text)",
+                        translation: "",
+                        optimized: out
                     ))
 
                     self.finishInput()
+                    let anchor = self.anchorPoint
                     self.hide()
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    PopupButton.simulatePaste()
-                    Diagnostics.log("InputPanel: default optimize, pasted")
+                    self.resultPanel.showResult(out, near: anchor)
+                    Diagnostics.log("InputPanel: default translate to Chinese, shown")
                 } catch {
                     Diagnostics.log("InputPanel default error: \(error.localizedDescription)")
                     self.finishInput()
