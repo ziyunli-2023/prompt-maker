@@ -94,17 +94,15 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
         self.backgroundColor = .clear
         self.minSize = NSSize(width: 340, height: 200)
 
-        // Vibrancy background with rounded corners
-        let blur = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
-        blur.material = .hudWindow
-        blur.blendingMode = .behindWindow
-        blur.state = .active
-        blur.autoresizingMask = [.width, .height]
-        blur.wantsLayer = true
-        blur.layer?.cornerRadius = cornerRadius
-        blur.layer?.masksToBounds = true
-        blur.layer?.borderWidth = 0.5
-        blur.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
+        // Solid opaque background with rounded corners
+        let bg = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
+        bg.autoresizingMask = [.width, .height]
+        bg.wantsLayer = true
+        bg.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        bg.layer?.cornerRadius = cornerRadius
+        bg.layer?.masksToBounds = true
+        bg.layer?.borderWidth = 0.5
+        bg.layer?.borderColor = NSColor.separatorColor.cgColor
 
         // Layout
         let menuSize: CGFloat = 22
@@ -125,7 +123,7 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
         pill.autoresizingMask = [.width, .maxYMargin]
         pill.wantsLayer = true
         pill.layer?.cornerRadius = inputAreaHeight / 2
-        pill.layer?.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.6).cgColor
+        pill.layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
         pill.layer?.borderWidth = 0.5
         pill.layer?.borderColor = NSColor.separatorColor.cgColor
 
@@ -145,11 +143,11 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
         pill.addSubview(send)
         pill.addSubview(pi)
 
-        blur.addSubview(sv)
-        blur.addSubview(pill)
-        blur.addSubview(menu)
+        bg.addSubview(sv)
+        bg.addSubview(pill)
+        bg.addSubview(menu)
 
-        self.contentView = blur
+        self.contentView = bg
 
         send.target = self
         send.action = #selector(handleFollowUp)
@@ -299,10 +297,6 @@ final class ResultPreviewPanel: NSPanel, NSTextFieldDelegate {
 
 // MARK: - Pill subviews
 
-private final class PillContainerView: NSView {
-    override var allowsVibrancy: Bool { true }
-}
+private final class PillContainerView: NSView {}
 
-private final class PillTextField: NSTextField {
-    override var allowsVibrancy: Bool { true }
-}
+private final class PillTextField: NSTextField {}

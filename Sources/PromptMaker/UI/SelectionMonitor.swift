@@ -13,8 +13,8 @@ final class SelectionMonitor {
     private var lastMouseDownTime: Date = Date()
     private var isPotentialSelection: Bool = false
 
-    init(historyStore: HistoryStore) {
-        self.popupButton = PopupButton(historyStore: historyStore)
+    init(historyStore: HistoryStore, inputPanel: InputPanel, resultPanel: ResultPreviewPanel) {
+        self.popupButton = PopupButton(historyStore: historyStore, inputPanel: inputPanel, resultPanel: resultPanel)
         let enabled = UserDefaults.standard.object(forKey: "selectionPopupEnabled") as? Bool ?? true
         if enabled { startMonitoring() }
     }
@@ -64,15 +64,17 @@ final class SelectionMonitor {
         // If it's a drag (>3 points) or a double/triple click, it's a potential selection
         isPotentialSelection = (distance > 3.0) || (clickCount > 1)
 
-        // Short delay to let selection settle
+        // Short delay to let selection settle. We carry the mouseUp position
+        // through — by the time this fires, NSEvent.mouseLocation may have
+        // drifted (e.g. trackpad released and hand moved away).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.checkForSelection()
+            self?.checkForSelection(anchor: upPos)
         }
     }
 
-    private func checkForSelection() {
+    private func checkForSelection(anchor: NSPoint) {
         var text = Self.getSelectedTextWithAX()
-        
+
         if (text == nil || text!.isEmpty) && isPotentialSelection {
             Diagnostics.log("AX returned empty, but drag/double-click detected. Trying Cmd+C fallback...")
             text = Self.getSelectedTextWithCmdC()
@@ -82,13 +84,9 @@ final class SelectionMonitor {
             popupButton.hide()
             return
         }
-        let position: NSPoint
-        if let bounds = Self.getSelectionBounds() {
-            position = NSPoint(x: bounds.midX, y: bounds.maxY + 4)
-        } else {
-            let mouse = NSEvent.mouseLocation
-            position = NSPoint(x: mouse.x + 16, y: mouse.y + 16)
-        }
+        // Always show next to where the user released the mouse — consistent
+        // across native apps and web pages, no AX-bounds surprises.
+        let position = NSPoint(x: anchor.x + 16, y: anchor.y + 16)
         popupButton.showAt(point: position, selectedText: text)
     }
 
@@ -148,27 +146,5 @@ final class SelectionMonitor {
         }
         Diagnostics.log("Cmd+C Fallback Failed")
         return nil
-    }
-
-    nonisolated static func getSelectionBounds() -> NSRect? {
-        let sys = AXUIElementCreateSystemWide()
-        var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(sys, kAXFocusedUIElementAttribute as CFString, &ref) == .success,
-              let el = ref else { return nil }
-        let element = el as! AXUIElement
-
-        var rangeRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success else { return nil }
-
-        var boundsRef: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(element, kAXBoundsForRangeParameterizedAttribute as CFString, rangeRef!, &boundsRef) == .success else { return nil }
-
-        var rect = CGRect.zero
-        guard AXValueGetValue(boundsRef as! AXValue, .cgRect, &rect) else { return nil }
-
-        // AX uses top-left origin; convert to bottom-left for NSWindow
-        guard let screenHeight = NSScreen.screens.first?.frame.height else { return nil }
-        let flippedY = screenHeight - rect.origin.y - rect.height
-        return NSRect(x: rect.origin.x, y: flippedY, width: rect.width, height: rect.height)
     }
 }

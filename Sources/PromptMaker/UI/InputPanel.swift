@@ -7,13 +7,14 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
     private let resultPanel: ResultPreviewPanel
     private var selectedText: String = ""
     private var anchorPoint: NSPoint = .zero
+    private var isStandalone: Bool = false
 
     private let textField: NSTextField
     private let sendButton: NSButton
     private let progressIndicator: NSProgressIndicator
     private var inFlight: Bool = false
 
-    private let panelWidth: CGFloat = 380
+    private let panelWidth: CGFloat = 480
     private let panelHeight: CGFloat = 56
     private let cornerRadius: CGFloat = 14
     private let padding: CGFloat = 10
@@ -62,17 +63,15 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
         self.isFloatingPanel = true
         self.becomesKeyOnlyIfNeeded = false
 
-        // Vibrancy background with rounded corners
-        let blur = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
-        blur.material = .hudWindow
-        blur.blendingMode = .behindWindow
-        blur.state = .active
-        blur.autoresizingMask = [.width, .height]
-        blur.wantsLayer = true
-        blur.layer?.cornerRadius = cornerRadius
-        blur.layer?.masksToBounds = true
-        blur.layer?.borderWidth = 0.5
-        blur.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
+        // Solid opaque background with rounded corners
+        let bg = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
+        bg.autoresizingMask = [.width, .height]
+        bg.wantsLayer = true
+        bg.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        bg.layer?.cornerRadius = cornerRadius
+        bg.layer?.masksToBounds = true
+        bg.layer?.borderWidth = 0.5
+        bg.layer?.borderColor = NSColor.separatorColor.cgColor
 
         // Pill container
         let pill = InputPillContainerView(frame: NSRect(x: padding, y: (panelHeight - inputHeight) / 2,
@@ -80,7 +79,7 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
         pill.autoresizingMask = [.width]
         pill.wantsLayer = true
         pill.layer?.cornerRadius = inputHeight / 2
-        pill.layer?.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.6).cgColor
+        pill.layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
         pill.layer?.borderWidth = 0.5
         pill.layer?.borderColor = NSColor.separatorColor.cgColor
 
@@ -99,8 +98,8 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
         pill.addSubview(tf)
         pill.addSubview(send)
         pill.addSubview(pi)
-        blur.addSubview(pill)
-        self.contentView = blur
+        bg.addSubview(pill)
+        self.contentView = bg
 
         tf.target = self
         tf.action = #selector(handleSubmit)
@@ -125,12 +124,41 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
     }
 
     func showAt(point: NSPoint, selectedText: String) {
+        self.isStandalone = false
         self.selectedText = selectedText
         self.anchorPoint = point
         self.textField.stringValue = ""
+        self.textField.placeholderString = "Enter to optimize · type instruction to translate / summarize / rewrite…"
         self.setFrameOrigin(NSPoint(x: point.x - frame.width / 2, y: point.y - frame.height - 4))
         self.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         self.textField.becomeFirstResponder()
+    }
+
+    func showStandalone() {
+        self.isStandalone = true
+        self.selectedText = ""
+        self.textField.stringValue = ""
+        self.textField.placeholderString = "Ask anything…  ⏎ to send"
+
+        // Center horizontally on the active screen, vertically biased upward
+        // so the result panel has room to expand below it.
+        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let originX = screen.midX - frame.width / 2
+        let originY = screen.minY + screen.height * 0.62
+        self.anchorPoint = NSPoint(x: screen.midX, y: originY + frame.height + 8)
+        self.setFrameOrigin(NSPoint(x: originX, y: originY))
+        self.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.textField.becomeFirstResponder()
+    }
+
+    func toggleStandalone() {
+        if self.isVisible && self.isStandalone {
+            self.hide()
+        } else {
+            self.showStandalone()
+        }
     }
 
     func hide() {
@@ -141,7 +169,51 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
         guard !inFlight else { return }
         let instruction = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = selectedText
-        Diagnostics.log("InputPanel submit: instruction.len=\(instruction.count), text.len=\(text.count)")
+        let standalone = isStandalone
+        Diagnostics.log("InputPanel submit: standalone=\(standalone), instruction.len=\(instruction.count), text.len=\(text.count)")
+
+        // Standalone Q&A: the field IS the prompt, no selected text involved.
+        if standalone {
+            guard !instruction.isEmpty else { return }
+            inFlight = true
+            textField.isEnabled = false
+            sendButton.isHidden = true
+            progressIndicator.startAnimation(nil)
+
+            let anchor = self.anchorPoint
+            Task { @MainActor in
+                let service = ServiceFactory.make()
+                let output: String?
+                do {
+                    output = try await service.freeformComplete(prompt: instruction)
+                } catch {
+                    Diagnostics.log("InputPanel freeform error: \(error.localizedDescription)")
+                    output = nil
+                }
+
+                self.finishInput()
+
+                guard let out = output, !out.isEmpty else {
+                    self.hide()
+                    return
+                }
+
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(out, forType: .string)
+
+                self.historyStore.add(HistoryEntry(
+                    id: UUID(), timestamp: Date(),
+                    input: instruction,
+                    translation: "",
+                    optimized: out
+                ))
+
+                self.hide()
+                self.resultPanel.showResult(out, near: anchor)
+            }
+            return
+        }
 
         inFlight = true
         textField.isEnabled = false
@@ -220,10 +292,6 @@ final class InputPanel: NSPanel, NSTextFieldDelegate {
 
 // MARK: - Pill subviews
 
-private final class InputPillContainerView: NSView {
-    override var allowsVibrancy: Bool { true }
-}
+private final class InputPillContainerView: NSView {}
 
-private final class InputPillTextField: NSTextField {
-    override var allowsVibrancy: Bool { true }
-}
+private final class InputPillTextField: NSTextField {}

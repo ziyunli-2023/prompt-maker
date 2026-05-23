@@ -4,12 +4,12 @@ import Foundation
 
 @MainActor
 final class HotkeyManager {
-    private weak var panel: FloatingPanel?
+    private let action: @MainActor () -> Void
     private var hotKeyRef: EventHotKeyRef?
     private var currentSpec: HotkeySpec?
 
-    init(panel: FloatingPanel) {
-        self.panel = panel
+    init(action: @escaping @MainActor () -> Void) {
+        self.action = action
         setupCarbonEventHandler()
         rebind(to: HotkeyPrefs.load())
     }
@@ -64,7 +64,7 @@ final class HotkeyManager {
 
     func fire() {
         Diagnostics.log("hotkey fired via Carbon")
-        panel?.toggle()
+        action()
     }
 }
 

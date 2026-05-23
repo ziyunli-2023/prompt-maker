@@ -8,6 +8,7 @@ struct CompletionResult: Sendable {
 protocol AICompletionService: Sendable {
     func complete(input: String) async throws -> CompletionResult
     func customComplete(input: String, instruction: String) async throws -> String
+    func freeformComplete(prompt: String) async throws -> String
 }
 
 enum CompletionError: LocalizedError {
@@ -56,6 +57,16 @@ Output JSON only. No markdown fences. No commentary before or after.
 
 let CUSTOM_SYSTEM_PROMPT = """
 Apply the user's instruction to the given text. Output ONLY the transformed text — no preamble, no commentary, no markdown code fences, no explanation. If the instruction asks a question about the text, answer it directly. Preserve the original language unless the instruction specifies otherwise.
+"""
+
+let FREEFORM_SYSTEM_PROMPT = """
+You are a helpful assistant. Answer the user's question or fulfill the request directly and concisely.
+
+Rules:
+- Output the answer ONLY. No preamble ("Sure, here's…"), no sign-off, no apology.
+- No markdown code fences unless the user explicitly asks for code or formatting.
+- Reply in the same language the user wrote in (Chinese → Chinese, English → English, mixed → match the dominant language).
+- If asked a factual question, give the answer directly; expand only if the user asks for detail.
 """
 
 func parseCompletionJSON(_ raw: String) throws -> CompletionResult {

@@ -23,10 +23,10 @@ final class PopupButton: NSPanel {
         return pi
     }()
 
-    init(historyStore: HistoryStore) {
+    init(historyStore: HistoryStore, inputPanel: InputPanel, resultPanel: ResultPreviewPanel) {
         self.historyStore = historyStore
-        self.resultPanel = ResultPreviewPanel(historyStore: historyStore)
-        self.inputPanel = InputPanel(historyStore: historyStore, resultPanel: self.resultPanel)
+        self.resultPanel = resultPanel
+        self.inputPanel = inputPanel
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 36, height: 36),
             styleMask: [.nonactivatingPanel, .borderless],

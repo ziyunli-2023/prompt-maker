@@ -56,6 +56,52 @@ actor GeminiCLIService: AICompletionService {
         return try parseCompletionJSON(stdout)
     }
 
+    func freeformComplete(prompt: String) async throws -> String {
+        let binPath = try await Self.pathBox.resolve()
+        let combined = "\(FREEFORM_SYSTEM_PROMPT)\n\n---USER---\n\(prompt)"
+
+        var args: [String] = []
+        if let model, !model.isEmpty {
+            args.append(contentsOf: ["-m", model])
+        }
+        args.append(contentsOf: ["-p", combined])
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binPath)
+        process.arguments = args
+        var env = ProcessInfo.processInfo.environment
+        let extraPaths = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            (env["HOME"].map { "\($0)/.nvm/versions/node" }) ?? ""
+        ].filter { !$0.isEmpty }
+        let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+        env["PATH"] = (extraPaths + [existingPath]).joined(separator: ":")
+        process.environment = env
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        try process.run()
+        let (outData, errData) = await Task.detached {
+            let o = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let e = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            return (o, e)
+        }.value
+        process.waitUntilExit()
+
+        let stdout = String(data: outData, encoding: .utf8) ?? ""
+        let stderr = String(data: errData, encoding: .utf8) ?? ""
+
+        if process.terminationStatus != 0 {
+            throw CompletionError.nonZeroExit(process.terminationStatus, stderr.isEmpty ? stdout : stderr)
+        }
+
+        return stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func customComplete(input: String, instruction: String) async throws -> String {
         let binPath = try await Self.pathBox.resolve()
         let combined = "\(CUSTOM_SYSTEM_PROMPT)\n\nInstruction: \(instruction)\n\n---TEXT---\n\(input)"

@@ -47,6 +47,8 @@ final class AppContext {
     let promptStore: PromptStore
     let historyStore: HistoryStore
     let floatingPanel: FloatingPanel
+    let inputPanel: InputPanel
+    let resultPanel: ResultPreviewPanel
     let hotkeyManager: HotkeyManager
     let selectionMonitor: SelectionMonitor
     private var settingsWindow: NSWindow?
@@ -55,11 +57,22 @@ final class AppContext {
         let promptStore = PromptStore()
         let historyStore = HistoryStore()
         let panel = FloatingPanel(promptStore: promptStore, historyStore: historyStore)
+        let resultPanel = ResultPreviewPanel(historyStore: historyStore)
+        let inputPanel = InputPanel(historyStore: historyStore, resultPanel: resultPanel)
+
         self.promptStore = promptStore
         self.historyStore = historyStore
         self.floatingPanel = panel
-        self.hotkeyManager = HotkeyManager(panel: panel)
-        self.selectionMonitor = SelectionMonitor(historyStore: historyStore)
+        self.resultPanel = resultPanel
+        self.inputPanel = inputPanel
+        self.hotkeyManager = HotkeyManager { [weak inputPanel] in
+            inputPanel?.toggleStandalone()
+        }
+        self.selectionMonitor = SelectionMonitor(
+            historyStore: historyStore,
+            inputPanel: inputPanel,
+            resultPanel: resultPanel
+        )
     }
 
     func openSettings() {
