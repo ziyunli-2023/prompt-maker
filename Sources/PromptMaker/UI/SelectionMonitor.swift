@@ -29,14 +29,20 @@ final class SelectionMonitor {
         guard mouseUpMonitor == nil else { return }
 
         mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] event in
-            Task { @MainActor in self?.handleMouseUp(event: event) }
+            // Capture position synchronously — NSEvent.mouseLocation read inside
+            // the Task can lag behind reality if the main actor is busy.
+            let pos = NSEvent.mouseLocation
+            let clickCount = event.clickCount
+            Task { @MainActor in self?.handleMouseUp(upPos: pos, clickCount: clickCount) }
         }
 
         mouseDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            Task { @MainActor in 
+            let pos = NSEvent.mouseLocation
+            let now = Date()
+            Task { @MainActor in
                 self?.popupButton.hide()
-                self?.lastMouseDownPos = NSEvent.mouseLocation
-                self?.lastMouseDownTime = Date()
+                self?.lastMouseDownPos = pos
+                self?.lastMouseDownTime = now
             }
         }
         Diagnostics.log("SelectionMonitor started")
@@ -50,15 +56,14 @@ final class SelectionMonitor {
 
     // MARK: - Selection detection
 
-    private func handleMouseUp(event: NSEvent) {
-        let pos = NSEvent.mouseLocation
-        let dx = pos.x - lastMouseDownPos.x
-        let dy = pos.y - lastMouseDownPos.y
+    private func handleMouseUp(upPos: NSPoint, clickCount: Int) {
+        let dx = upPos.x - lastMouseDownPos.x
+        let dy = upPos.y - lastMouseDownPos.y
         let distance = sqrt(dx*dx + dy*dy)
-        
+
         // If it's a drag (>3 points) or a double/triple click, it's a potential selection
-        isPotentialSelection = (distance > 3.0) || (event.clickCount > 1)
-        
+        isPotentialSelection = (distance > 3.0) || (clickCount > 1)
+
         // Short delay to let selection settle
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.checkForSelection()
