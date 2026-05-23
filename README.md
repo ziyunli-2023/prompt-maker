@@ -8,11 +8,12 @@ PromptMaker is a tiny menu-bar app that turns rough, mixed Chinese/English draft
 
 ## Why you'll like it
 
-- ⚡ **Two ways in, zero friction.** Hit a global hotkey (`⌘⇧M`) anywhere, or just *select text* in any app — Safari, Chrome, VS Code, Notes, Slack — and a ✨ icon pops up next to your cursor.
+- ⚡ **Two ways in, zero friction.** Hit the global hotkey (`⌘⇧M`, customizable) to open a centered **ask-anything pill**, or *select text* in any app — Safari, Chrome, VS Code, Notes, Slack — and a ✨ icon pops up next to your cursor.
 - 🪄 **Short click = instant magic.** Click ✨ once → text is optimized → auto-pasted back in place. The original mess is gone, the polished version is there. No window. No copy-paste dance.
 - 🧠 **Long-press = "do whatever I say."** Hold ✨ for a beat and a tiny input pill appears: *"summarize in one sentence"*, *"rewrite as a Cursor prompt"*, *"translate to French"*. Type your instruction, hit Enter, done.
+- 💬 **Hotkey → freeform Q&A.** `⌘⇧M` opens a pill in the middle of the screen. Type any question or request, press Enter — the answer shows in a result panel that you can keep refining with follow-ups. Clipboard gets the answer automatically.
 - 🔁 **Refine in place.** The result panel has a follow-up box — keep iterating without retyping your text.
-- 📋 **Side-by-side translation.** For the default optimize flow, you see both a *literal* translation and the *idiomatic* one. Pick whichever you trust.
+- 📋 **Side-by-side translation.** Reachable from the menu bar's "打开 / Open" item: shows a *literal* translation next to the *idiomatic* one for the original prompt-polishing flow.
 - 🕘 **Last 100 prompts, one keystroke away.** Click any entry to restore it.
 - 🔌 **Pluggable backend.** Ships with DeepSeek (cheap, fast, great at Chinese). Swap in Gemini API or Gemini CLI from Settings without rebuilding.
 - 🪶 **5 MB binary. No Electron. No background CPU.** Pure Swift + AppKit. Menu-bar only, no Dock clutter.
@@ -22,22 +23,22 @@ PromptMaker is a tiny menu-bar app that turns rough, mixed Chinese/English draft
 ## The 60-second tour
 
 ```text
-        ┌─────────────────────────────────────────────┐
-        │  ⌘⇧M  anywhere  →  floating panel           │
-        │                                             │
-        │   ┌─────────────────────────────────────┐   │
-        │   │ paste your messy draft here…       │   │
-        │   └─────────────────────────────────────┘   │
-        │                                             │
-        │   ┌─── translation ───┬── optimized ───┐    │
-        │   │ word-for-word      │ idiomatic EN  │    │
-        │   │ faithful           │ ← clipboard   │    │
-        │   └────────────────────┴───────────────┘    │
-        └─────────────────────────────────────────────┘
+   ⌘⇧M  anywhere   →   centered Q&A pill
+        ┌────────────────────────────────────────┐
+        │  Ask anything…              ⏎ to send →│
+        └────────────────────────────────────────┘
+                          ↓ Enter
+        ┌────────────────────────────────────────┐
+        │  Answer appears here…                  │
+        │  (auto-copied to clipboard)            │
+        │  ┌──────────────────────────────────┐  │
+        │  │ Refine further…              →  │  │
+        │  └──────────────────────────────────┘  │
+        └────────────────────────────────────────┘
 
-   …or just  ⌃ drag-select text  →  ✨ pops up
-                  ↳ click   → optimize + auto-paste
-                  ↳ hold    → custom instruction
+   …or just  drag-select text anywhere  →  ✨ pops up next to it
+                  ↳ click       → optimize + auto-paste over selection
+                  ↳ long-press  → custom instruction pill
 ```
 
 ---
@@ -61,7 +62,7 @@ open build/PromptMaker.app
 
 A ✨ icon shows up in your menu bar. macOS will ask for **Accessibility** permission — grant it so the selection popup can read text from any app.
 
-Press **⌘⇧M** anywhere. Type or paste something. Hit `⌘↩`. That's the whole product.
+Press **⌘⇧M** anywhere. The Q&A pill pops up in the middle of the screen — type a question, press `⏎`, the answer drops below it (and lands in your clipboard). Or, select text in any app and click the ✨ that appears.
 
 ---
 
@@ -69,12 +70,13 @@ Press **⌘⇧M** anywhere. Type or paste something. Hit `⌘↩`. That's the wh
 
 | Where | Key | What it does |
 |---|---|---|
-| anywhere | `⌘⇧M` | summon the floating panel (customizable in Settings) |
-| panel | `⌘↩` | submit (optimized version auto-copies to clipboard) |
-| panel | `Esc` | dismiss |
+| anywhere | `⌘⇧M` | open the centered Q&A pill (press again to dismiss; customizable in Settings) |
+| Q&A pill | `⏎` | send the question; answer opens below |
+| Q&A pill | `Esc` | dismiss |
 | selection ✨ | click | optimize + auto-paste over your selection |
 | selection ✨ | long-press | open custom-instruction pill |
-| result panel | type + `↩` | refine the result further |
+| result panel | type + `⏎` | refine the result further |
+| menu bar → 打开 | — | open the two-column translation panel (prompt-polishing flow) |
 
 ---
 
